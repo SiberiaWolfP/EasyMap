@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>main.cpp</file>
+        <file>map_func</file>
+        <file>map.css</file>
+        <file>map.html</file>
+        <file>qwebchannel</file>
+        <file>messagedialog.qml</file>
+        <file>addnodedialog.qml</file>
+    </qresource>
+</RCC>

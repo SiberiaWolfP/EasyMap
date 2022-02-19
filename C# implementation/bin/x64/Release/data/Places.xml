@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<ArrayOfPlacePoint xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <PlacePoint>
+    <Id>1</Id>
+    <Longitude>114.363992</Longitude>
+    <Latitude>30.534812</Latitude>
+    <Name>1</Name>
+  </PlacePoint>
+</ArrayOfPlacePoint>

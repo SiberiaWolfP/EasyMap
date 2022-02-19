@@ -1,0 +1,271 @@
+﻿// 初始化地图
+var simpleMarker;
+var map = new AMap.Map('container', {
+    resizeEnable: true,
+    expandZoomRange:true,
+    zooms:[3,20],
+    zoom: 15,
+    center: [114.364829,30.537861],
+    mapStyle:'amap://styles/6870921099ab53d006a49fe549df29ff'
+});
+
+// 初始化高德地图UI组件，此处为若自动加载不成功，则代码手动加载
+if (typeof(AMapUI) == "undefined") {
+    $.getScript("https://webapi.amap.com/ui/1.0/main.js?v=1.0.11").done(function(script, textstatus) {
+        if (textstatus == "success" && typeof(AMapUI) != undefined) {
+            AMapUI.loadUI(['overlay/SimpleMarker'], function(SimpleMarker) {
+                simpleMarker = SimpleMarker;
+            });
+        }
+    })
+} else {
+    AMapUI.loadUI(['overlay/SimpleMarker'], function(SimpleMarker) {
+        simpleMarker = SimpleMarker;
+    });
+}
+
+// 绘制工具
+var mouseTool = new AMap.MouseTool(map);
+mouseTool.on("draw", function(e) {
+    if (e.obj.CLASS_NAME == 'AMap.Marker') {
+        var str = JSON.stringify(e.obj.getPosition());
+        addNodeBtn.changeAddNode(str);
+    }
+    else if (e.obj.CLASS_NAME == 'AMap.Polyline') {
+        var str = JSON.stringify(e.obj.getPath());
+        addSideBtn.changeAddSide(str);
+    }
+});
+
+// 当地图加载完成后，设置其可显示范围为武大周边
+map.on("complete", function () {
+    limitBounds = new AMap.Bounds([114.343328,30.519489],[114.389677,30.54906]);
+    map.setLimitBounds(limitBounds);
+});
+
+// 使地图回到中心
+function movetoCenter() {
+    map.panTo([114.364829,30.537861]);
+}
+
+// 景点被点击后显示景点详情
+function showNodeMessage(e) {
+    var info = [];
+    var data = Array.from(e.target.getExtData());
+    var infoWindowContent =
+        "<div style=\"padding:0px 0px 0px 0px;\"><h4>" + data[1]["nodeName"] + "</h4>"+
+        "<div style=\"padding:0px 0px 0px 0px;\"><h4>" + data[1]["nodeDesc"] + "</h4>";
+    var infoWindow = new AMap.InfoWindow({
+        content: infoWindowContent
+    });
+    infoWindow.open(map, [data[1]["lng"], data[1]["lat"]]);
+}
+
+var clickIndex = 0;
+var clickedNode = [];
+// 景点被点击后不显示景点详情，若其为第一个被点击的点，则icon变为1，若为第二个，则icon变为2，且回传前端，准备开始寻找最短路径
+function getOneToOneNode(e) {
+    clickIndex += 1;
+    if (clickIndex == 1) {
+        e.target.setIconLabel("1");
+        clickedNode.push(Array.from(e.target.getExtData())[0]);
+    } else if (clickIndex == 2) {
+        e.target.setIconLabel("2");
+        clickedNode.push(Array.from(e.target.getExtData())[0]);
+        var str = JSON.stringify(clickedNode);
+        searchShortest.nodeGetted(str);
+        clickIndex = 0;
+        clickedNode = [];
+    }
+}
+
+var clickedOneNode = [];
+// 景点被点击后不显示景点详情，若其为第一个被点击的点，则icon变为1，若为第二个，则icon变为2，且回传前端，准备开始寻找最短路径
+function getOneNode(e) {
+    e.target.setIconLabel("始");
+    clickedOneNode.push(Array.from(e.target.getExtData())[0]);
+    var str = JSON.stringify(clickedOneNode);
+    recommend.clickedANode(str);
+    clickedOneNode = [];
+}
+
+// 在地图上绘制景点，json中含有景点信息，index决定景点被点击后会触发哪个函数
+function addNode(json, index) {
+    for (var o in json) {
+        if (json[o]["isEntity"] == false) continue;
+        var iconStyles = simpleMarker.getBuiltInIconStyles('numv2');
+        var iconIdx = 0;
+        var marker = new simpleMarker({
+            iconTheme: 'fresh',
+            //使用内置的iconStyle
+            iconStyle: iconStyles[iconIdx],
+            //图标文字
+            iconLabel: {
+                innerHTML: json[o]["nodeName"].toString().slice(0,1),
+                style: {
+                    color: '#fff'
+                }
+            },
+            //显示定位点
+            showPositionPoint: true,
+            topWhenClick: true,
+            title: json[o]["nodeName"].toString(),
+            clickable: true,
+            extData: [o, json[o]],
+
+            map: map,
+            position: [json[o]["lng"], json[o]["lat"]]
+        });
+        if (index == 0) {
+            marker.on("click", showNodeMessage);
+        } else if (index == 1) {
+            marker.on("click", getOneToOneNode);
+        } else if (index == 2) {
+            marker.on("click", getOneNode);
+        }
+    }
+}
+
+function dispAllItem(json) {
+    // 先绘制路线再绘制景点，以保证景点图标在上层
+    for (var o in json["side"]) {
+        var path = [];
+        for (var key in json["side"][o]) {
+            path.push([json["node"][key]["lng"], json["node"][key]["lat"]]);
+            path.push([json["node"][json["side"][o][key]]["lng"], json["node"][json["side"][o][key]]["lat"]]);
+        }
+        var polyline = new AMap.Polyline({
+            path: path,
+            isOutline: true,
+            outlineColor: '#ffeeff',
+            borderWeight: 1,
+            strokeColor: "#3366FF",
+            strokeOpacity: 1,
+            strokeWeight: 4,
+            // 折线样式还支持 'dashed'
+            strokeStyle: "solid",
+            // strokeStyle是dashed时有效
+            strokeDasharray: [10, 5],
+            lineJoin: 'round',
+            lineCap: 'round',
+            //zIndex: 50,
+        });
+        polyline.setMap(map);
+    }
+    addNode(json["node"], 0);
+}
+
+// 在地图上绘制
+function draw(type) {
+    switch(type) {
+        case 'marker': {
+            mouseTool.marker({
+                animation: 'AMAP_ANIMATION_DROP',
+            });
+            break;
+        }
+        case 'polyline': {
+            mouseTool.polyline({
+                strokeColor: "#3366FF",
+                strokeOpacity: 1,
+                strokeWeight: 4,
+                // 折线样式还支持 'dashed'
+                strokeStyle: "solid",
+            });
+            break;
+        }
+    }
+}
+
+function drawPath(path, json) {
+    var paths = [];
+    var json_edit = {};
+    for (var node in path) {
+        paths.push([json["node"][path[node].toString()]["lng"], json["node"][path[node].toString()]["lat"]]);
+    }
+    var polyline = new AMap.Polyline({
+        path: paths,
+        isOutline: true,
+        outlineColor: '#ffeeff',
+        borderWeight: 1,
+        showDir: true,
+        strokeColor: "#3366FF",
+        strokeOpacity: 1,
+        strokeWeight: 6,
+        // 折线样式还支持 'dashed'
+        strokeStyle: "solid",
+        // strokeStyle是dashed时有效
+        strokeDasharray: [10, 5],
+        lineJoin: 'round',
+        lineCap: 'round',
+        //zIndex: 50,
+    });
+    polyline.setMap(map);
+    json_edit[path[0].toString()] = json["node"][path[0].toString()];
+    json_edit[path[path.length - 1].toString()] = json["node"][path[path.length - 1].toString()];
+    addNode(json_edit, 0);
+}
+
+var saved;
+var moveCenterBtn;
+var addSideBtn;
+//使js可以重复调用onload
+if (typeof window.onload == 'function') {
+    saved = window.onload;
+}
+window.onload = function() {
+    // 保证以下代码可以执行到
+    if (saved) saved();
+    // 将浏览器js函数和qml对象进行连接
+    new QWebChannel(qt.webChannelTransport, function(channel) {
+        // 回到地图中心按钮
+        moveCenterBtn = channel.objects.moveCenterBtn;
+        moveCenterBtn.sendsignal.connect(function() {
+            movetoCenter();
+        });
+        // 添加道路按钮
+        addSideBtn = channel.objects.addSideBtn;
+        addSideBtn.sendsignal.connect(function() {
+            draw('polyline');
+        });
+        // 添加景点按钮
+        addNodeBtn = channel.objects.addNodeBtn;
+        addNodeBtn.sendsignal.connect(function() {
+            draw('marker');
+        });
+        // 消息提示栏
+        logMessage = channel.objects.logMessageRec;
+        logMessage.clearMap.connect(function() {
+            mouseTool.close(true);
+            map.clearMap();
+        });
+        // 显示所有景点按钮
+        dispNode = channel.objects.dispNode;
+        dispNode.sendsignal.connect(function(json) {
+            logMessage.addLog("浏览器接收到景点JSON：" + JSON.stringify(json));
+            addNode(json, 0);
+        });
+        // 显示所有道路按钮（会一并显示景点）
+        dispAll = channel.objects.dispAll;
+        dispAll.sendsignal.connect(function(json) {
+            logMessage.addLog("浏览器接收到全部JSON：" + JSON.stringify(json));
+            dispAllItem(json);
+        });
+        // 查询两点间最短路径
+        searchShortest = channel.objects.searchShortest;
+        searchShortest.sendsignal.connect(function(json) {
+            logMessage.addLog("查询最短路径：浏览器接收到JSON：" + JSON.stringify(json));
+            addNode(json, 1);
+        });
+        searchShortest.sendPath.connect(function(path, json) {
+            logMessage.addLog("浏览器接收到搜索路径：" + JSON.stringify(path));
+            drawPath(path, json);
+        });
+        // 获取推荐路径
+        recommend = channel.objects.recommend;
+        recommend.sendsignal.connect(function(json) {
+            logMessage.addLog("获取推荐路径：浏览器接收到JSON：" + JSON.stringify(json));
+            addNode(json, 2);
+        });
+    });
+};
